@@ -11,7 +11,54 @@ window.requestAnimFrame = (function() {
         function(/*function */callback, /* DOMElement*/element) {
             window.setTimeout(callback, 1000 / 60);
         };
-}) ();
+})();
+
+function BufferLoader(context, urlList, callback) {
+    this.context = context;
+    this.urlList = urlList;
+    this.onload = callback;
+    this.bufferList = [];
+    this.loadCount = 0;
+
+    this.loadBuffer = function(url, index) {
+        // Load buffer asynchronously
+        var request = new XMLHttpRequest();
+        request.open('GET', url, true);
+        request.responseType = 'arraybuffer';
+
+        var loader = this;
+
+        request.onload = function() {
+            // Asynchronously decode the audio file data in request.response
+            loader.context.decodeAudioData(
+            request.response,
+            function(buffer) {
+                if (!buffer) {
+                    alert('error decoding file data: ' + url);
+                    return;
+                }
+                loader.bufferList[index] = buffer;
+                if (++loader.loadCount === loader.urlList.length) {
+                    loader.onload(loader.bufferList);
+                }
+            },
+            function(error) {
+                console.error('decodeAudioData error', error);
+            });
+        };
+        request.onerror = function() {
+            alert('BufferLoader: XHR error');
+        };
+        request.send();
+    };
+
+    this.load = function() {
+        for (var i = 0; i < this.urlList.length; ++i) {
+            this.loadBuffer(this.urlList[i], i);
+        }
+    };
+}
+
 
 /**
  * Method to remove an item from an array
@@ -67,17 +114,60 @@ var game = (function() {
         player, boss,
         buggers = [],
         buggersCount,
+        imagesList = [
+            'images/fire.png',
+            'images/background-1.jpg',
+            'images/background-2.jpg',
+            'images/background-3.jpg',
+            'images/background-4.jpg',
+            'images/background-4-mirror.jpg',
+            'images/background-3-mirror.jpg',
+            'images/background-2-mirror.jpg',
+            'images/background-1-mirror.jpg',
+            'images/foreground-1.png',
+            'images/foreground-2.png',
+            'images/foreground-3.png',
+            'images/foreground-4.png',
+            'images/starfield-2.png',
+            'images/ship.png',
+            'images/ship-focused.png',
+            'images/shot.png',
+            'images/boss.png',
+            'images/bugger.png'
+        ],
+        images = [],
+        IMG = {
+            fire: 0,
+            background1: 1,
+            background2: 2,
+            background3: 3,
+            background4: 4,
+            background4m: 5,
+            background3m: 6,
+            background2m: 7,
+            background1m: 8,
+            foreground1: 9,
+            foreground2: 10,
+            foreground3: 11,
+            foreground4: 12,
+            starfield: 13,
+            ship: 14,
+            shipFocused: 15,
+            shot: 16,
+            boss: 17,
+            bugger: 18
+        },
         audioCtx, audioBuffer, audioMusic, currentAudioMusic, gainNode,
         changingMusic = false,
         musicList = [
-            'Music/MP3/16-bits-TFIV-Stand-Up-Against-Myself.mp3',
-            'Music/MP3/32-bits-TFV-Steel-Of-Destiny.mp3',
-            'Music/MP3/128-bits-Ikaruga-Ideal.mp3'
+            'music/16-bits-TFIV-Stand-Up-Against-Myself.ogg',
+            'music/32-bits-TFV-Steel-Of-Destiny.ogg',
+            'music/128-bits-Ikaruga-Ideal.ogg'
         ],
         fxList = [
-            'Music/FX/bomb.mp3',
-            'Music/FX/shot.mp3',
-            'Music/FX/explosion.mp3'
+            'music/FX/bomb.ogg',
+            'music/FX/shot.ogg',
+            'music/FX/explosion.ogg'
         ],
         FX = {
             bomb: 0,
@@ -86,7 +176,41 @@ var game = (function() {
         },
         score = 0,
         buggerMode = false,
-        bossMode = false;
+        bossMode = false,
+        allowMusicChange = false,
+        touch = false;
+
+    function preloadImages() {
+        var loaded = 0,
+            total = imagesList.length;
+        for (var i = 0; i < total; i++) {
+            var img = new Image();
+            img.src = imagesList[i];
+            img.onload = function() {
+                loaded++;
+                if (loaded === total) {
+                    preloadMusic();
+                }
+            };
+            images.push(img);
+        }
+    }
+
+    function preloadMusic() {
+        var loaded = 0,
+            fxAndMusic = musicList.concat(fxList),
+            total = fxAndMusic.length;
+        for (var i = 0; i < total; i++) {
+            var audio = new Audio();
+            audio.addEventListener('canplaythrough', function() {
+                loaded++;
+                if (loaded === total) {
+                    init(true);
+                }
+            }, false);
+            audio.src = fxAndMusic[i];
+        }
+    }
 
     /**
      * Main game loop
@@ -124,38 +248,39 @@ var game = (function() {
 
     /**
      * Init vars, load assets and start the main animation.
+     * @param {Boolean} ready If true, launch the app, if false, preload images
      * @return {[type]}
      */
-    function init() {
-        canvas = document.getElementById('canvas');
-        ctx = canvas.getContext('2d');
+    function init(ready) {
+        if (!ready) {
+            canvas = document.getElementById('canvas');
+            ctx = canvas.getContext('2d');
 
+            // Buffering
+            buffer = document.createElement('canvas');
+            bufferctx = buffer.getContext('2d');
 
-        // Buffering
-        buffer = document.createElement('canvas');
-        bufferctx = buffer.getContext('2d');
+            ctx.fillStyle = '#fff';
+            ctx.font = 'italic 25px arial';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('Loading...', buffer.width - 200, buffer.height - 50);
 
-        ctx.fillStyle = '#fff';
-        ctx.font = 'italic 25px arial';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText('Loading...', buffer.width - 200, buffer.height - 50);
+            preloadImages();
+        } else {
+            // Adjusting buggers
+            buggersCount = (canvas.height / 40) * 15;
 
-        // Adjusting buggers
-        buggersCount = (canvas.height / 40) * 15;
+            // Particle System
+            fireParticle = images[IMG.fire];
+            particleManager = new ParticleManager(bufferctx);
 
-        // Particle System
-        fireParticle = new Image();
-        fireParticle.src = 'images/fire.png';
-        particleManager = new ParticleManager(bufferctx);
+            window.AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioCtx = new window.AudioContext();
 
-        window.AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new window.AudioContext();
+            // Audio stuff
+            audioBuffer = new window.BufferLoader(audioCtx, musicList.concat(fxList), createAudioSources);
+            audioBuffer.load();
 
-        // Audio stuff
-        audioBuffer = new window.BufferLoader(audioCtx, musicList.concat(fxList), createAudioSources);
-        audioBuffer.load();
-
-        setTimeout(function() {
             // Load resources
             // Background pattern
             background = new Image();
@@ -238,6 +363,23 @@ var game = (function() {
             addListener(document, 'keydown', keyDown);
             addListener(document, 'keyup', keyUp);
 
+            document.addEventListener('touchstart', function(e) {
+                player.moveTo(e.touches[0]);
+                touch = true;
+                player.firing = true;
+                e.preventDefault();
+            });
+            document.addEventListener('touchmove', function(e) {
+                player.moveTo(e.touches[0]);
+                e.preventDefault();
+            });
+            document.addEventListener('touchend', function(e) {
+                player.moveTo(e.touches[0]);
+                touch = false;
+                player.firing = false;
+                e.preventDefault();
+            });
+
             // Resizing Event
             addListener(window, 'resize', resizeCanvas);
 
@@ -247,7 +389,7 @@ var game = (function() {
                 window.requestAnimFrame(anim);
             };
             anim();
-        }, 3000);
+        }
     }
 
     /**
@@ -267,8 +409,8 @@ var game = (function() {
             audioMusic[i].loop = false;
         }
         gainNode.connect(audioCtx.destination);
-        gainNode.gain.value = 0;
         audioMusic[0].start(0);
+        allowMusicChange = true;
     }
 
     /**
@@ -330,8 +472,7 @@ var game = (function() {
      * @param {[type]} player
      */
     function Player(player) {
-        player = new Image();
-        player.src = 'images/ship.png';
+        player = images[IMG.ship];
         player.posX = player.width; // Dedault X position
         player.posY = (background.height / 2) - (player.height / 2); // Def Y pos
         player.centerX = player.posX + (player.width / 2);
@@ -356,6 +497,15 @@ var game = (function() {
            firerate: 20
         };
         player.weapon.spread = Math.PI / player.weapon.spreadBase;
+
+        player.moveTo = function(data) {
+            var x = data.pageX - player.width / 2,
+                y = data.pageY - player.height / 2;
+            if (x > 0 && x < canvas.width && y > 0 && y < canvas.height) {
+                player.posX = x;
+                player.posY = y;
+            }
+        };
 
         /**
          * Method to sread bullets
@@ -449,7 +599,9 @@ var game = (function() {
                 });
                 shot.add();
             }
-            playFx(musicList.length + FX.shot);
+            if (allowMusicChange) {
+                playFx(musicList.length + FX.shot);
+            }
         };
 
         /**
@@ -504,8 +656,7 @@ var game = (function() {
      * @param {[type]} _y
      */
     function Boss(boss, _x, _y) {
-        boss = new Image();
-        boss.src = 'images/boss.png'; //128x128
+        boss = images[IMG.boss]; //128x128
         boss.posX = canvas.width - boss.width;
         boss.posY = canvas.height / 2 - boss.width / 2;
         boss.life = 700; //700 hits
@@ -576,7 +727,9 @@ var game = (function() {
                 (a.posY <= bY && bY < (a.posY + a.width))) {
                 callback();
                 makeExplosion(a.posX, a.posY);
-                playFx(musicList.length + FX.explosion);
+                if (allowMusicChange) {
+                    playFx(musicList.length + FX.explosion);
+                }
                 return true;
             }
         }
@@ -766,7 +919,8 @@ var game = (function() {
         }
         if (keyPressed.fire) {
             player.firing = true;
-        } else {
+            touch = false;
+        } else if (keyPressed.fire === false && !touch) {
             player.firing = false;
         }
         if (keyPressed.fire2) {
@@ -774,24 +928,20 @@ var game = (function() {
         }
         if (keyPressed.speedUp && bgSpeed < 10) {
             bgSpeed += 1;
-            console.log(bgSpeed);
         }
         if (keyPressed.speedDown && bgSpeed >= 2) {
             bgSpeed -= 1;
-            console.log(bgSpeed);
         }
-        if (keyPressed.toggleMusic) {
+        if (keyPressed.toggleMusic && allowMusicChange) {
             if (!changingMusic) {
                 changingMusic = true;
                 changeAudioMusic();
-                console.log('Changing music');
             }
         }
-        if (keyPressed.mute) {
+        if (keyPressed.mute && allowMusicChange) {
             if (!changingMusic) {
                 changingMusic = true;
                 toggleMute();
-                console.log('Mute');
             }
         }
         if (keyPressed.buggerMode) {
@@ -893,7 +1043,9 @@ var game = (function() {
 
         player.bombing = true;
 
-        playFx(musicList.length + FX.bomb);
+        if (allowMusicChange) {
+            playFx(musicList.length + FX.bomb);
+        }
 
         // BOMB
         particleManager.createExplosion(0, 0, 130, 15, 70, 3, 0);
@@ -988,6 +1140,10 @@ var game = (function() {
 
         bufferctx.fillStyle = '#fff';
         bufferctx.fillText('Score: ' + score, 50, 50);
+
+        if (!allowMusicChange) {
+            bufferctx.fillText('Music still loading...', 50, 100);
+        }
 
         printHelp();
 

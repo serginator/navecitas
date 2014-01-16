@@ -4,6 +4,15 @@ Demo para el taller de GameMe5 2013
 13-12-13
 por [@EtnasSoft](http://twitter.com/etnassoft) y [@serginator](http://twitter.com/serginator)
 
+## Ver la [demo online](http://serginator.github.io/workshopGameMe5/)
+
+## Enhanced version
+* Sonidos cambiados a OGG por compatibilidad
+* Preloading de recursos en vez de timeouts (algo simple pero eficaz)
+* Compatible con Chrome (online) y Firefox. No se ha probado en Safari.
+* Touch events
+* [TODO] Gamepad
+
 ## Resources
 * Charla de [@EtnasSoft](http://twitter.com/etnassoft) y [@serginator](http://twitter.com/serginator) en Camon
    * [Video](http://vimeo.com/39259983)
@@ -21,7 +30,7 @@ por [@EtnasSoft](http://twitter.com/etnassoft) y [@serginator](http://twitter.co
 * [Megalista de recursos](http://www.mangatutorials.com/forum/showthread.php?742-The-Ultimate-Indie-Game-Developer-Resource-List)
 
 ## Para lanzar la demo
-Conviene ejecutarla en un servidor web por la carga de recursos por XHR. Además está optimizada para Firefox >= 26.
+Conviene ejecutarla en un servidor web por la carga de recursos por XHR. En Chrome en local da fallos visuales, online se ve correctamente (habrá que investigar por qué)
 ```bash
 npm install -g grunt-cli
 npm install
@@ -48,3 +57,18 @@ grunt
 * Explosiones, sistema de partículas
 * Bomba: fogonazo con FX que borre los enemigos.
 * Mapa de colisiones: limitar el hitbox del protagonista al sprite del 'focus'.
+
+## Para hacer deploy en gh-pages
+```
+# Chuletilla para que no se me olvide
+# desde la raíz del proyecto
+git clone git@github.com:serginator/workshopGameMe5.git dist
+cd dist
+git checkout --orphan gh-pages
+git rm -rf .
+grunt deploy # hará linteo, la distribución y luego lanzará el paquete grunt-github-pages
+```
+
+
+[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/serginator/workshopgameme5/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
+
